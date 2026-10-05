@@ -1,7 +1,6 @@
 import {Pool} from 'pg';
 import {demoState} from './demo';
 
-export const postgresEnabled=process.env.DAYBOOK_DATABASE==='postgres';
 
 const globals=globalThis as typeof globalThis & {daybookPgPool?:Pool;daybookPgReady?:Promise<void>};
 

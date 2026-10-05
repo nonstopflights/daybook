@@ -7,7 +7,6 @@
     "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1 --port 3200",
     "test": "node --import tsx --test tests/*.test.ts",
-    "migrate:postgres": "node --env-file=.env.local --import tsx scripts/migrate-to-postgres.ts",
     "migrate:attachments": "node --env-file=.env.local --import tsx scripts/migrate-attachments-to-postgres.ts"
   },
   "dependencies": {

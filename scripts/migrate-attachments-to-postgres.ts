@@ -1,13 +1,11 @@
 import {readFile,stat} from 'node:fs/promises';
 import path from 'node:path';
-import {dataDir} from '../lib/store';
 import {ensurePostgres,postgresPool} from '../lib/postgres';
 
 async function main(){
-  if(process.env.DAYBOOK_DATABASE!=='postgres')throw new Error('Set DAYBOOK_DATABASE=postgres');
   await ensurePostgres();
   const client=await postgresPool().connect();
-  const source=process.env.DAYBOOK_LEGACY_ATTACHMENTS_DIR||path.join(dataDir,'attachments');
+  const source=process.env.DAYBOOK_LEGACY_ATTACHMENTS_DIR||path.resolve('data','attachments');
   try{
     const files=(await client.query<{id:string;size:number}>('SELECT id,size FROM daybook.files WHERE content IS NULL')).rows;
     for(const file of files){

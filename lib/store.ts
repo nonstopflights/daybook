@@ -1,38 +1,42 @@
-import {DatabaseSync} from 'node:sqlite';
-import {mkdirSync} from 'node:fs';
-import {mkdir,writeFile,readFile} from 'node:fs/promises';
-import path from 'node:path';
-import {demoState} from './demo';
 import {makeCard,localDate,defaultViewPreferences,type State,type Card} from './types';
 import {cardSchema,tagSchema,collectionSchema,stateSchema,preferencesSchema} from './schema';
-import {ensurePostgres,postgresEnabled,postgresPool} from './postgres';
-export const dataDir=process.env.DAYBOOK_DATA_DIR||path.join(process.cwd(),'data');
-let db:DatabaseSync|undefined;
-function database(){if(!db){mkdirSync(dataDir,{recursive:true});db=new DatabaseSync(path.join(dataDir,'daybook.sqlite'));db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS messages (guid TEXT PRIMARY KEY, card_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,size INTEGER NOT NULL);');db.prepare('INSERT OR IGNORE INTO state(id,body) VALUES(1,?)').run(JSON.stringify(demoState()));}return db;}
+import {ensurePostgres,postgresPool} from './postgres';
 function normalizeState(body:string|State):State {const state=(typeof body==='string'?JSON.parse(body):body) as State;const oldColors:Record<string,string>={'#4f4f4f':'#a23b72','#717171':'#2c7a7b','#949494':'#9a5b13','#606060':'#6458a6','#828282':'#327346','#a3a3a3':'#b34f45'};return {...state,tags:state.tags.map(tag=>({...tag,color:oldColors[tag.color.toLowerCase()]||tag.color})),preferences:{...defaultViewPreferences,...state.preferences}};}
-function sqliteState():State {const row=database().prepare('SELECT body FROM state WHERE id=1').get() as {body:string};return normalizeState(row.body);}
-let sqliteQueue:Promise<void>=Promise.resolve();
-function withSqliteQueue<T>(work:()=>Promise<T>):Promise<T>{const result=sqliteQueue.then(work,work);sqliteQueue=result.then(()=>{},()=>{});return result;}
-export type StoredAiSettings={api_key:string|null;model:string|null};
-function sqliteAiSettingsDatabase(){const d=database();d.exec('CREATE TABLE IF NOT EXISTS ai_settings (id INTEGER PRIMARY KEY CHECK(id=1), api_key TEXT, model TEXT)');return d;}
-export function readSqliteAiSettings():Promise<StoredAiSettings|undefined>{return withSqliteQueue(async()=>sqliteAiSettingsDatabase().prepare('SELECT api_key,model FROM ai_settings WHERE id=1').get() as StoredAiSettings|undefined);}
-export function writeSqliteAiSettings(patch:{key?:string;model:string}):Promise<void>{return withSqliteQueue(async()=>{sqliteAiSettingsDatabase().prepare('INSERT INTO ai_settings(id,api_key,model) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET api_key=COALESCE(excluded.api_key,ai_settings.api_key),model=excluded.model').run(patch.key??null,patch.model);});}
-export async function readState():Promise<State> {if(postgresEnabled){await ensurePostgres();const result=await postgresPool().query<{body:State}>('SELECT body FROM daybook.state WHERE id=1');return normalizeState(result.rows[0].body);}return withSqliteQueue(async()=>sqliteState());}
+export async function readState():Promise<State> {
+  await ensurePostgres();
+  const result=await postgresPool().query<{body:State}>('SELECT body FROM daybook.state WHERE id=1');
+  return normalizeState(result.rows[0].body);
+}
 export type Transaction={findMessage:(guid:string)=>Promise<string|null>;putMessage:(guid:string,cardId:string)=>Promise<void>};
 export async function transact<T>(fn:(state:State,tx:Transaction)=>T|Promise<T>):Promise<T> {
-  if(postgresEnabled){
-    await ensurePostgres();const client=await postgresPool().connect();
-    try {await client.query('BEGIN');const row=await client.query<{body:State}>('SELECT body FROM daybook.state WHERE id=1 FOR UPDATE');const state=normalizeState(row.rows[0].body);
-      const tx:Transaction={findMessage:async guid=>(await client.query<{card_id:string}>('SELECT card_id FROM daybook.messages WHERE guid=$1',[guid])).rows[0]?.card_id||null,putMessage:async(guid,cardId)=>{await client.query('INSERT INTO daybook.messages(guid,card_id) VALUES($1,$2)',[guid,cardId]);}};
-      const result=await fn(state,tx);state.version++;await client.query('UPDATE daybook.state SET body=$1::jsonb WHERE id=1',[JSON.stringify(state)]);await client.query('COMMIT');return result;
-    } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
-  }
-  return withSqliteQueue(async()=>{const d=database();d.exec('BEGIN IMMEDIATE');try{const state=sqliteState();const tx:Transaction={findMessage:async guid=>(d.prepare('SELECT card_id FROM messages WHERE guid=?').get(guid) as {card_id:string}|undefined)?.card_id||null,putMessage:async(guid,cardId)=>{d.prepare('INSERT INTO messages(guid,card_id) VALUES(?,?)').run(guid,cardId);}};const result=await fn(state,tx);state.version++;d.prepare('UPDATE state SET body=? WHERE id=1').run(JSON.stringify(state));d.exec('COMMIT');return result;}catch(error){d.exec('ROLLBACK');throw error;}});
+  await ensurePostgres();const client=await postgresPool().connect();
+  try {
+    await client.query('BEGIN');
+    const row=await client.query<{body:State}>('SELECT body FROM daybook.state WHERE id=1 FOR UPDATE');
+    const state=normalizeState(row.rows[0].body);
+    const tx:Transaction={findMessage:async guid=>(await client.query<{card_id:string}>('SELECT card_id FROM daybook.messages WHERE guid=$1',[guid])).rows[0]?.card_id||null,putMessage:async(guid,cardId)=>{await client.query('INSERT INTO daybook.messages(guid,card_id) VALUES($1,$2)',[guid,cardId]);}};
+    const result=await fn(state,tx);state.version++;
+    await client.query('UPDATE daybook.state SET body=$1::jsonb WHERE id=1',[JSON.stringify(state)]);
+    await client.query('COMMIT');return result;
+  } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
 }
 export type FileRecord={id:string;name:string;type:string;size:number};
-export async function saveFile(record:FileRecord,content:Buffer):Promise<void>{if(postgresEnabled){await ensurePostgres();await postgresPool().query('INSERT INTO daybook.files(id,name,type,size,content) VALUES($1,$2,$3,$4,$5)',[record.id,record.name,record.type,record.size,content]);return;}await mkdir(path.join(dataDir,'attachments'),{recursive:true});await writeFile(path.join(dataDir,'attachments',record.id),content);await withSqliteQueue(async()=>{database().prepare('INSERT INTO files(id,name,type,size) VALUES(?,?,?,?)').run(record.id,record.name,record.type,record.size);});}
-export async function findFile(id:string):Promise<FileRecord|undefined>{if(postgresEnabled){await ensurePostgres();const result=await postgresPool().query<FileRecord>('SELECT id,name,type,size::integer AS size FROM daybook.files WHERE id=$1',[id]);return result.rows[0];}return withSqliteQueue(async()=>database().prepare('SELECT * FROM files WHERE id=?').get(id) as FileRecord|undefined);}
-export async function readStoredFile(id:string):Promise<{file:FileRecord;data:Buffer}|undefined>{const file=await findFile(id);if(!file)return undefined;if(postgresEnabled){await ensurePostgres();const row=(await postgresPool().query<{content:Buffer|null}>('SELECT content FROM daybook.files WHERE id=$1',[id])).rows[0];if(row?.content)return {file,data:row.content};}return {file,data:await readFile(path.join(dataDir,'attachments',id))};}
+export async function saveFile(record:FileRecord,content:Buffer):Promise<void>{
+  await ensurePostgres();
+  await postgresPool().query('INSERT INTO daybook.files(id,name,type,size,content) VALUES($1,$2,$3,$4,$5)',[record.id,record.name,record.type,record.size,content]);
+}
+export async function findFile(id:string):Promise<FileRecord|undefined>{
+  await ensurePostgres();
+  return (await postgresPool().query<FileRecord>('SELECT id,name,type,size::integer AS size FROM daybook.files WHERE id=$1',[id])).rows[0];
+}
+export async function readStoredFile(id:string):Promise<{file:FileRecord;data:Buffer}|undefined>{
+  await ensurePostgres();
+  const row=(await postgresPool().query<FileRecord & {content:Buffer|null}>('SELECT id,name,type,size::integer AS size,content FROM daybook.files WHERE id=$1',[id])).rows[0];
+  if(!row)return undefined;
+  if(row.content===null)throw new Error('Attachment content is missing; run npm run migrate:attachments before serving legacy attachments.');
+  const {content,...file}=row;
+  return {file,data:content};
+}
 export class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
 export function mutation(action:Record<string,unknown>):Promise<State> {return transact(s=>{const stamp=new Date().toISOString();const find=(id:unknown)=>{const c=s.cards.find(c=>c.id===id);if(!c)throw new HttpError(404,'Thought not found');return c;};
 switch(action.type){

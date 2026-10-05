@@ -6,7 +6,7 @@ test('AI settings work when cached database initialization predates their table'
   const globals=globalThis as typeof globalThis & {daybookPgPool?:Pool;daybookPgReady?:Promise<void>};
   const previousPool=globals.daybookPgPool;
   const previousReady=globals.daybookPgReady;
-  const previousEnv={database:process.env.DAYBOOK_DATABASE,key:process.env.OPENAI_API_KEY,model:process.env.OPENAI_SUMMARY_MODEL};
+  const previousEnv={key:process.env.OPENAI_API_KEY,model:process.env.OPENAI_SUMMARY_MODEL};
   let tableExists=false;
   let row:{api_key:string|null;model:string|null}|undefined;
   globals.daybookPgReady=Promise.resolve();
@@ -25,7 +25,6 @@ test('AI settings work when cached database initialization predates their table'
       throw new Error(`Unexpected query: ${sql}`);
     },
   } as unknown as Pool;
-  process.env.DAYBOOK_DATABASE='postgres';
   process.env.OPENAI_API_KEY='test-environment-key';
   process.env.OPENAI_SUMMARY_MODEL='test-environment-model';
   try{
@@ -39,7 +38,7 @@ test('AI settings work when cached database initialization predates their table'
   }finally{
     globals.daybookPgPool=previousPool;
     globals.daybookPgReady=previousReady;
-    for(const [name,value] of [['DAYBOOK_DATABASE',previousEnv.database],['OPENAI_API_KEY',previousEnv.key],['OPENAI_SUMMARY_MODEL',previousEnv.model]]){
+    for(const [name,value] of [['OPENAI_API_KEY',previousEnv.key],['OPENAI_SUMMARY_MODEL',previousEnv.model]]){
       if(value===undefined)delete process.env[name!];else process.env[name!]=value;
     }
   }
