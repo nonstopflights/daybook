@@ -18,7 +18,7 @@ Open http://127.0.0.1:3200. Six sample cards demonstrate the views; Settings let
 
 - Natural-language capture with an editable interpretation preview: tasks, notes, events, dates, deadlines, time, recurrence, importance, explicit tags and alias matching.
 - Cards, list and boards grouped by chosen tags. Drag on desktop or use “Move to” on touch devices. Multiple tags can place the same card in several columns.
-- Rich-text editing with autosave, headings, links, lists, checklists, undo/redo, pasted images and file attachments. Card summaries are generated from note content; an explicit editor button can ask OpenAI for a shorter summary.
+- Rich-text editing with autosave, headings, links, lists, checklists, undo/redo, pasted images and file attachments. Card summaries are generated from note content.
 - Tag creation, renaming, colors, aliases, archive, merge, delete and column order. Tag deletion preserves the cards.
 - Collections, searching, energy filters, effort estimates and a Today shortlist.
 - Daily bullet journal, reflections, future log, deliberate migration, crossing out, completion and archive recovery.
@@ -94,10 +94,6 @@ The built-in parser runs locally. It understands common English dates and intent
 
 For broader interpretation, configure an **OpenAI-compatible** chat endpoint using `LLM_BASE_URL`, `LLM_MODEL`, and optionally `LLM_API_KEY`. A local model service can use `http://127.0.0.1:11434/v1`. Responses are schema-validated and fall back to local rules if unavailable. The model interprets text; it cannot execute tools. If you choose an external endpoint, your captured text and tag vocabulary are sent there.
 
-## Optional OpenAI summaries
-
-Enter your OpenAI API key and summary model in **Settings → OpenAI summaries** to enable the editor’s **Summarize with OpenAI** button. Settings changes take effect immediately. The key is kept in the database (`daybook.ai_settings` in PostgreSQL), is never returned to the browser, and is included in database backups. Protect those backup files as secrets. `OPENAI_API_KEY` and `OPENAI_SUMMARY_MODEL` in `.env.local` remain optional fallback values until overridden in Settings. The default model is `gpt-5.4-nano`. The button sends the current note text to OpenAI only when clicked; pasted images remain on your server. Without a key, Daybook still makes a short local summary from the note text.
-
 ## iMessage on your Mac
 
 Messages being installed does not itself connect the app. This draft includes a receiver; it has **not been tested against your live Messages account**, and does not automatically send replies or import message attachments.
@@ -146,7 +142,7 @@ Run the app once before starting the worker so the database exists. Notification
 node --env-file=.env.local scripts/backup.mjs
 ```
 
-This uses `pg_dump` to archive the `daybook` schema, including attachment binaries and the OpenAI key. Protect backup files as secrets. Backups run only when invoked; store them on another disk or system. To restore, stop the app and reminder worker and follow the bundled `RESTORE.txt`. Keep `.env.local` backed up separately. JSON export contains attachment references rather than their bytes. Import replaces the journal after an explicit warning.
+This uses `pg_dump` to archive the `daybook` schema, including attachment binaries. Protect backup files as secrets. Backups run only when invoked; store them on another disk or system. To restore, stop the app and reminder worker and follow the bundled `RESTORE.txt`. Keep `.env.local` backed up separately. JSON export contains attachment references rather than their bytes. Import replaces the journal after an explicit warning.
 
 ## Validation
 

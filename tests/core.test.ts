@@ -45,22 +45,6 @@ test('PostgreSQL mutations merge tags without duplicating cards and reject stale
   assert.equal(state.cards.find(c=>c.id===a.id)?.plannedDate,'2026-10-01');
 });
 test('PostgreSQL attachment storage saves and reads file bytes',async()=>{const {saveFile,readStoredFile}=await import('../lib/store');const id=crypto.randomUUID();await saveFile({id,name:'test.png',type:'image/png',size:3},Buffer.from([1,2,3]));const result=await readStoredFile(id);assert.equal(result?.file.name,'test.png');assert.deepEqual(result?.data,Buffer.from([1,2,3]));});
-test('PostgreSQL AI settings load, persist, preserve and remove API keys',async()=>{
-  const {readAiSettings,writeAiSettings}=await import('../lib/ai-settings');
-  const previousKey=process.env.OPENAI_API_KEY,previousModel=process.env.OPENAI_SUMMARY_MODEL;
-  process.env.OPENAI_API_KEY='test-environment-key';
-  process.env.OPENAI_SUMMARY_MODEL='test-environment-model';
-  try{
-    assert.deepEqual(await readAiSettings(),{key:'test-environment-key',model:'test-environment-model',source:'environment'});
-    await writeAiSettings({key:'test-saved-key',model:'test-model'});
-    assert.deepEqual(await readAiSettings(),{key:'test-saved-key',model:'test-model',source:'settings'});
-    assert.deepEqual(await writeAiSettings({model:'test-new-model'}),{key:'test-saved-key',model:'test-new-model',source:'settings'});
-    assert.deepEqual(await writeAiSettings({key:'',model:'test-new-model'}),{key:'',model:'test-new-model',source:'settings'});
-  }finally{
-    if(previousKey===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previousKey;
-    if(previousModel===undefined)delete process.env.OPENAI_SUMMARY_MODEL;else process.env.OPENAI_SUMMARY_MODEL=previousModel;
-  }
-});
 test('view preferences persist and older exports default to visible',async()=>{
   const {mutation,readState}=await import('../lib/store');
   assert.deepEqual((await readState()).preferences,{today:true,journal:true,future:true,showCardTitles:false});
