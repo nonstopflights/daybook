@@ -1,7 +1,8 @@
+import {ensureInbox} from './inbox';
 import {makeCard,localDate,defaultViewPreferences,type State,type Card} from './types';
 import {cardSchema,tagSchema,collectionSchema,stateSchema,preferencesSchema} from './schema';
 import {ensurePostgres,postgresPool} from './postgres';
-function normalizeState(body:string|State):State {const state=(typeof body==='string'?JSON.parse(body):body) as State;const oldColors:Record<string,string>={'#4f4f4f':'#a23b72','#717171':'#2c7a7b','#949494':'#9a5b13','#606060':'#6458a6','#828282':'#327346','#a3a3a3':'#b34f45'};return {...state,tags:state.tags.map(tag=>({...tag,color:oldColors[tag.color.toLowerCase()]||tag.color})),preferences:{...defaultViewPreferences,...state.preferences}};}
+function normalizeState(body:string|State):State {const state=(typeof body==='string'?JSON.parse(body):body) as State;const oldColors:Record<string,string>={'#4f4f4f':'#a23b72','#717171':'#2c7a7b','#949494':'#9a5b13','#606060':'#6458a6','#828282':'#327346','#a3a3a3':'#b34f45'};const normalized={...state,tags:state.tags.map(tag=>({...tag,color:oldColors[tag.color.toLowerCase()]||tag.color})),preferences:{...defaultViewPreferences,...state.preferences}};ensureInbox(normalized);return normalized;}
 export async function readState():Promise<State> {
   await ensurePostgres();
   const result=await postgresPool().query<{body:State}>('SELECT body FROM daybook.state WHERE id=1');
@@ -15,7 +16,7 @@ export async function transact<T>(fn:(state:State,tx:Transaction)=>T|Promise<T>)
     const row=await client.query<{body:State}>('SELECT body FROM daybook.state WHERE id=1 FOR UPDATE');
     const state=normalizeState(row.rows[0].body);
     const tx:Transaction={findMessage:async guid=>(await client.query<{card_id:string}>('SELECT card_id FROM daybook.messages WHERE guid=$1',[guid])).rows[0]?.card_id||null,putMessage:async(guid,cardId)=>{await client.query('INSERT INTO daybook.messages(guid,card_id) VALUES($1,$2)',[guid,cardId]);}};
-    const result=await fn(state,tx);state.version++;
+    const result=await fn(state,tx);ensureInbox(state);state.version++;
     await client.query('UPDATE daybook.state SET body=$1::jsonb WHERE id=1',[JSON.stringify(state)]);
     await client.query('COMMIT');return result;
   } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
