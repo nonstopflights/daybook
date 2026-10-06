@@ -1,7 +1,11 @@
 import {lookup} from 'node:dns/promises';
-import {isIP} from 'node:net';
+import {isIP,type LookupFunction} from 'node:net';
 import {get as httpGet} from 'node:http';
 import {get as httpsGet} from 'node:https';
+
+export function pinnedLookup(address:{address:string;family:number}):LookupFunction {
+  return (_hostname,options,callback)=>options.all?callback(null,[address]):callback(null,address.address,address.family);
+}
 
 export type LinkPreview = {url:string;title:string;description:string;siteName:string;image:string|null};
 export function publicAddress(address:string):boolean {
@@ -20,7 +24,7 @@ export function parsePreview(html:string,url:string):LinkPreview {
   }
   const host=new URL(url).hostname.replace(/^www\./,'');
   let image:string|null=null;
-  try{const value=meta.get('og:image')||meta.get('twitter:image');if(value){const resolved=new URL(value,url);if(['https:','http:'].includes(resolved.protocol)&&!resolved.username&&!resolved.password)image=resolved.href;}}catch{}
+  try{const value=meta.get('og:image')||meta.get('twitter:image');if(value){const resolved=new URL(value,url);if(['https:','http:'].includes(resolved.protocol)&&!resolved.username&&!resolved.password){if(new URL(url).protocol==='https:'&&resolved.protocol==='http:')resolved.protocol='https:';image=resolved.href;}}}catch{}
   return {url,title:(meta.get('og:title')||meta.get('twitter:title')||decode(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'')||host).slice(0,300),description:(meta.get('og:description')||meta.get('description')||meta.get('twitter:description')||'').slice(0,500),siteName:(meta.get('og:site_name')||host).slice(0,100),image};
 }
 async function readPage(url:URL,signal:AbortSignal):Promise<{html?:string;redirect?:string}> {
@@ -29,7 +33,7 @@ async function readPage(url:URL,signal:AbortSignal):Promise<{html?:string;redire
   if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw new Error('Private address');
   const address=addresses[0];
   return new Promise((resolve,reject)=>{
-    const request=(url.protocol==='https:'?httpsGet:httpGet)(url,{signal,headers:{'User-Agent':'Daybook-LinkPreview/1.0',Accept:'text/html'},lookup:(_hostname,_options,callback)=>callback(null,address.address,address.family)},response=>{
+    const request=(url.protocol==='https:'?httpsGet:httpGet)(url,{signal,headers:{'User-Agent':'Daybook-LinkPreview/1.0',Accept:'text/html'},lookup:pinnedLookup(address)},response=>{
       if(response.statusCode&&response.statusCode>=300&&response.statusCode<400&&response.headers.location){response.resume();resolve({redirect:response.headers.location});return;}
       if(response.statusCode!==200||!response.headers['content-type']?.includes('text/html')){response.resume();reject(new Error('No HTML preview'));return;}
       const chunks:Buffer[]=[];let size=0;
