@@ -255,3 +255,5 @@ body { font-family: var(--font-sans); }
 
 .card-tags:empty{display:none}
 .card-footer .card-archive{display:inline-flex;gap:6px;width:auto;padding:0 10px;font-size:12px}
+
+.capture-images{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}.capture-image{position:relative;border:1px solid var(--border);border-radius:var(--radius-control);padding:6px;background:var(--surface)}.capture-image img{display:block;width:112px;height:88px;object-fit:contain;border-radius:4px}.capture-image button{position:absolute;top:2px;right:2px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--border);border-radius:50%;background:var(--surface);cursor:pointer}.capture-image button:disabled{cursor:wait;opacity:.5}
