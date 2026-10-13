@@ -217,29 +217,27 @@ body { font-family: var(--font-sans); }
   border-color: var(--border-strong);
 }
 .tag-board {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: start;
+  gap: var(--space-3);
   padding-bottom: var(--space-5);
-  scroll-snap-type: x proximity;
 }
 .board-column {
-  flex: 0 0 304px;
-  width: 304px;
+  width: 100%;
   min-width: 0;
   min-height: 220px;
-  padding: var(--space-3);
+  padding: var(--space-2);
   border-radius: var(--radius-card);
   background: var(--surface-subtle);
-  scroll-snap-align: start;
 }
+.board-column .thought-card { padding: var(--space-3); }
+.board-column .card-footer { flex-wrap: wrap; }
 .column-cards { display: flex; flex-direction: column; gap: var(--space-3); }
 @media (max-width: 760px) {
   .card-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
   .card-footer { min-height: 60px; }
   .card-footer button, .focus-pin { width: 44px; height: 44px; }
-  .board-column { flex-basis: min(304px, calc(100vw - 56px)); width: min(304px, calc(100vw - 56px)); }
 }
 
 .link-previews{display:grid;gap:12px;margin:12px 0;min-width:0}
